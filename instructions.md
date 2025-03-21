@@ -1,524 +1,433 @@
 Here are some instructions/guidelines for the hackathon project. Please read them carefully and follow them step by step. The goal is to create a financial statement analysis tool using Google Gemini 2.0 Flash and LangChain, with a focus on modular design, prompt engineering, and efficient data processing.
 # Hackathon Project: AI-Driven Financial Statement Analysis
 
-Okay, let's break down this hackathon project step-by-step. You've got a good grasp of the core challenges, and I'm here to guide you through the technical and strategic aspects. You're right to focus on Gemini 2.0 Flash and Thinking, given their capabilities and the generous free tier – that's a smart, cost-effective choice for a hackathon. Let's tackle this systematically:
+Okay, let's break down this hackathon project step-by-step. You've got a good grasp of the core challenges, and I'm here to guide you through the technical and strategic aspects.  You're right to focus on Gemini 2.0 Flash and Thinking, given their capabilities and the generous free tier – that's a smart, cost-effective choice for a hackathon.  Let's tackle this systematically:
 
-1. High-Level Strategy & Architecture
+**1. High-Level Strategy & Architecture**
 
-LLM-Centric Approach: You're absolutely correct – for this project, leveraging powerful LLMs like Gemini is the most efficient and effective approach. Forget about complex, fine-tuned NER models, custom spaCy pipelines, or Hugging Face Transformers. Gemini's large context window, native PDF/image understanding, and general reasoning abilities make it ideal for this task. We'll focus on prompt engineering, not model training.
+*   **LLM-Centric Approach:** You're absolutely correct – for this project, leveraging powerful LLMs like Gemini is the most efficient and effective approach.  Forget about complex, fine-tuned NER models, custom spaCy pipelines, or Hugging Face Transformers.  Gemini's large context window, native PDF/image understanding, and general reasoning abilities make it ideal for this task.  We'll focus on *prompt engineering*, not model training.
 
-Modular Design: We will break the problem into smaller, manageable chunks. This means separate prompts for different aspects of the analysis (extraction, ratio calculation, summary generation). This is crucial for:
+*   **Modular Design:**  We will break the problem into smaller, manageable chunks.  This means separate prompts for different aspects of the analysis (extraction, ratio calculation, summary generation). This is crucial for:
+    *   **Controllability:**  Easier to debug and refine individual parts.
+    *   **Output Quality:**  LLMs perform better with focused tasks.
+    *   **Maintainability:**  If requirements change, you can modify specific modules.
 
-Controllability: Easier to debug and refine individual parts.
+*   **Data Flow:**
+    1.  **Input:** User uploads a PDF, spreadsheet (CSV), or scanned document (image).
+    2.  **Preprocessing (Minimal):**  For PDFs, use Gemini's built-in PDF parsing.  For CSV, ensure it's properly formatted. For scanned documents, Gemini should handle it directly due to its image understanding capabilities.
+    3.  **LLM Processing (Multiple Stages):** A series of prompts to Gemini will:
+        *   Extract key financial data (numbers, tables, text).
+        *   Calculate financial ratios.
+        *   Generate summaries for each section (Business Overview, Income Statement, etc.).
+        *   Identify key trends and insights.
+    4.  **Output:**
+        *   Structured JSON data containing all extracted information and analysis results.
+        *   A final PDF report generated from this JSON data.
+    5. **Frontend(Streamlit):**
+        *   File upload component for each input option, PDF, Spreadsheet, and Scanned Documents.
+        *   Button to initiate the analysis.
+        *   Displays and organizes the analyzed financial data.
 
-Output Quality: LLMs perform better with focused tasks.
+*   **Tool Use (Important, but Focused):**  Yes, we *will* use tool use, but in a very specific way.  We're not building a general-purpose agent that can browse the web or use arbitrary tools.  Instead, we'll define custom tools that represent the *financial calculations*.  This is where LangChain comes in handy.  It allows us to:
 
-Maintainability: If requirements change, you can modify specific modules.
+    *   **Structure Calculations:**  Define functions for each ratio (current ratio, debt-to-equity, etc.).  These functions will take the necessary extracted data as input and return the calculated ratio.
+    *   **Integrate with LLM:**  LangChain provides the framework to present these calculations as "tools" to Gemini.  The LLM can then decide *when* and *how* to use these tools based on the context of the financial document.  This is *far* more reliable than asking the LLM to perform calculations directly in its prompt.
 
-Data Flow:
+*   **LangChain vs. LangGraph vs. CrewAI:**
 
-Input: User uploads a PDF, spreadsheet (CSV), or scanned document (image).
+    *   **LangChain:** This is our primary library. We'll use it for:
+        *   **Prompt Templates:**  Creating structured, reusable prompts for Gemini.
+        *   **Tool Definition:**  Defining the financial calculation tools.
+        *   **LLM Chaining:**  Connecting the different prompts and tools in a logical sequence.
+    *   **LangGraph:**  Potentially useful for more complex workflows, but likely overkill for this hackathon. LangGraph excels at creating cyclical or stateful agents, which we don't need here.  Let's keep it simple and stick with LangChain's core chaining capabilities.
+    *   **CrewAI:**  Also overkill for this project.  CrewAI is designed for coordinating multiple agents with different roles.  We have a single, focused task.
 
-Preprocessing (Minimal): For PDFs, use Gemini's built-in PDF parsing. For CSV, ensure it's properly formatted. For scanned documents, Gemini should handle it directly due to its image understanding capabilities.
-
-LLM Processing (Multiple Stages): A series of prompts to Gemini will:
-
-Extract key financial data (numbers, tables, text).
-
-Calculate financial ratios.
-
-Generate summaries for each section (Business Overview, Income Statement, etc.).
-
-Identify key trends and insights.
-
-Output:
-
-Structured JSON data containing all extracted information and analysis results.
-
-A final PDF report generated from this JSON data.
-
-Frontend(Streamlit):
-
-File upload component for each input option, PDF, Spreadsheet, and Scanned Documents.
-
-Button to initiate the analysis.
-
-Displays and organizes the analyzed financial data.
-
-Tool Use (Important, but Focused): Yes, we will use tool use, but in a very specific way. We're not building a general-purpose agent that can browse the web or use arbitrary tools. Instead, we'll define custom tools that represent the financial calculations. This is where LangChain comes in handy. It allows us to:
-
-Structure Calculations: Define functions for each ratio (current ratio, debt-to-equity, etc.). These functions will take the necessary extracted data as input and return the calculated ratio.
-
-Integrate with LLM: LangChain provides the framework to present these calculations as "tools" to Gemini. The LLM can then decide when and how to use these tools based on the context of the financial document. This is far more reliable than asking the LLM to perform calculations directly in its prompt.
-
-LangChain vs. LangGraph vs. CrewAI:
-
-LangChain: This is our primary library. We'll use it for:
-
-Prompt Templates: Creating structured, reusable prompts for Gemini.
-
-Tool Definition: Defining the financial calculation tools.
-
-LLM Chaining: Connecting the different prompts and tools in a logical sequence.
-
-LangGraph: Potentially useful for more complex workflows, but likely overkill for this hackathon. LangGraph excels at creating cyclical or stateful agents, which we don't need here. Let's keep it simple and stick with LangChain's core chaining capabilities.
-
-CrewAI: Also overkill for this project. CrewAI is designed for coordinating multiple agents with different roles. We have a single, focused task.
-
-2. Detailed Implementation Plan
+**2. Detailed Implementation Plan**
 
 Let's break down the implementation into specific, actionable steps:
 
-Step 1: Project Setup & Dependencies
+**Step 1: Project Setup & Dependencies**
 
-Create a Python environment: Use venv or conda to manage dependencies.
+*   **Create a Python environment:** Use `venv` or `conda` to manage dependencies.
+*   **Install Libraries:**
+    ```bash
+    pip install google-generativeai langchain streamlit PyPDF2 python-dotenv httpx
+    ```
+    *   `google-generativeai`:  For interacting with the Gemini API.
+    *   `langchain`: For prompt engineering, tool definition, and LLM chaining.
+    *   `streamlit`: For the initial frontend.
+    *   `PyPDF2`: While Gemini handles PDFs natively, PyPDF2 might be useful for *pre-splitting* very long PDFs if you encounter context window limitations (unlikely, but good to have).
+    *   `python-dotenv`: To manage your Gemini API key securely (store it in a `.env` file).
+    *    `httpx`: For making HTTP requests.
 
-Install Libraries:
+**Step 2:  API Key Setup**
 
-pip install google-generativeai langchain streamlit PyPDF2 python-dotenv httpx
+*   Obtain a Gemini API key from Google AI Studio.
+*   Create a `.env` file in your project root:
+    ```
+    GOOGLE_API_KEY=your_actual_api_key_here
+    ```
+*   Load the API key in your Python code:
+    ```python
+    import os
+    from dotenv import load_dotenv
 
+    load_dotenv()
+    google_api_key = os.getenv("GOOGLE_API_KEY")
+    ```
 
-google-generativeai: For interacting with the Gemini API.
+**Step 3: Core Functions (Tools)**
 
-langchain: For prompt engineering, tool definition, and LLM chaining.
+*   Create a Python file (e.g., `financial_tools.py`) to define your financial calculation tools.  These are standard Python functions:
 
-streamlit: For the initial frontend.
+    ```python
+    # financial_tools.py
 
-PyPDF2: While Gemini handles PDFs natively, PyPDF2 might be useful for pre-splitting very long PDFs if you encounter context window limitations (unlikely, but good to have).
+    def calculate_current_ratio(current_assets: float, current_liabilities: float) -> float:
+        """Calculates the current ratio."""
+        if current_liabilities == 0:
+            return float('inf')  # Handle division by zero
+        return current_assets / current_liabilities
 
-python-dotenv: To manage your Gemini API key securely (store it in a .env file).
+    def calculate_debt_to_equity_ratio(total_liabilities: float, shareholders_equity: float) -> float:
+        """Calculates the debt-to-equity ratio."""
+        if shareholders_equity == 0:
+            return float('inf')
+        return total_liabilities / shareholders_equity
 
-httpx: For making HTTP requests.
+    # ... Add functions for ALL the required ratios from the document ...
+    def calculate_gross_margin_ratio(gross_profit: float, net_sales: float) -> float:
+        if net_sales == 0:
+            return 0.0
+        return gross_profit / net_sales
 
-Step 2: API Key Setup
+    def calculate_operating_margin_ratio(operating_income: float, net_sales: float) -> float:
+        if net_sales == 0:
+            return 0.0
+        return operating_income / net_sales
 
-Obtain a Gemini API key from Google AI Studio.
+    def calculate_return_on_assets_ratio(net_income: float, total_assets: float) -> float:
+        if total_assets == 0:
+            return 0.0
+        return net_income / total_assets
 
-Create a .env file in your project root:
+    def calculate_return_on_equity_ratio(net_income: float, shareholders_equity: float) -> float:
+        if shareholders_equity == 0:
+            return 0.0
+        return net_income / shareholders_equity
 
-GOOGLE_API_KEY=your_actual_api_key_here
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-IGNORE_WHEN_COPYING_END
+    def calculate_asset_turnover_ratio(net_sales: float, average_total_assets: float) -> float:
+        if average_total_assets == 0:
+            return 0.0
+        return net_sales / average_total_assets
 
-Load the API key in your Python code:
+    def calculate_inventory_turnover_ratio(cost_of_goods_sold: float, average_inventory: float) -> float:
+        if average_inventory == 0:
+            return 0.0
+        return cost_of_goods_sold / average_inventory
 
-import os
-from dotenv import load_dotenv
+    def calculate_receivables_turnover_ratio(net_credit_sales: float, average_accounts_receivable: float) -> float:
+        if average_accounts_receivable == 0:
+            return 0.0
+        return net_credit_sales / average_accounts_receivable
 
-load_dotenv()
-google_api_key = os.getenv("GOOGLE_API_KEY")
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-Python
-IGNORE_WHEN_COPYING_END
+    def calculate_debt_ratio(total_liabilities: float, total_assets: float) -> float:
+        if total_assets == 0:
+            return 0.0
+        return total_liabilities / total_assets
 
-Step 3: Core Functions (Tools)
+    def calculate_interest_coverage_ratio(operating_income: float, interest_expenses: float) -> float:
+        if interest_expenses == 0:
+            return float('inf')
+        return operating_income / interest_expenses
+    ```
+    *   **Type Hinting:** Use type hints (e.g., `current_assets: float`) for clarity and to help catch errors.
+    *   **Error Handling:** Include basic error handling, especially for division by zero.
+    *   **Docstrings:**  Write clear docstrings explaining what each function does.  This is crucial for the LLM to understand the tool's purpose.
 
-Create a Python file (e.g., financial_tools.py) to define your financial calculation tools. These are standard Python functions:
+**Step 4: LangChain Tool Integration**
 
-# financial_tools.py
+*   Create another Python file (e.g., `llm_chain.py`). This is where you'll define your LangChain prompts and integrate the tools.
 
-def calculate_current_ratio(current_assets: float, current_liabilities: float) -> float:
-    """Calculates the current ratio."""
-    if current_liabilities == 0:
-        return float('inf')  # Handle division by zero
-    return current_assets / current_liabilities
+    ```python
+    # llm_chain.py
+    import os
+    from dotenv import load_dotenv
+    import google.generativeai as genai
+    from langchain.prompts import ChatPromptTemplate
+    from langchain.tools import StructuredTool
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
+    from financial_tools import *  # Import your financial tools
 
-def calculate_debt_to_equity_ratio(total_liabilities: float, shareholders_equity: float) -> float:
-    """Calculates the debt-to-equity ratio."""
-    if shareholders_equity == 0:
-        return float('inf')
-    return total_liabilities / shareholders_equity
+    load_dotenv()
+    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# ... Add functions for ALL the required ratios from the document ...
-def calculate_gross_margin_ratio(gross_profit: float, net_sales: float) -> float:
-    if net_sales == 0:
-        return 0.0
-    return gross_profit / net_sales
+    # --- Define LangChain Tools from your functions ---
+    tools = [
+        StructuredTool.from_function(calculate_current_ratio),
+        StructuredTool.from_function(calculate_debt_to_equity_ratio),
+        # ... add all your other tools here ...
+        StructuredTool.from_function(calculate_gross_margin_ratio),
+        StructuredTool.from_function(calculate_operating_margin_ratio),
+        StructuredTool.from_function(calculate_return_on_assets_ratio),
+        StructuredTool.from_function(calculate_return_on_equity_ratio),
+        StructuredTool.from_function(calculate_asset_turnover_ratio),
+        StructuredTool.from_function(calculate_inventory_turnover_ratio),
+        StructuredTool.from_function(calculate_receivables_turnover_ratio),
+        StructuredTool.from_function(calculate_debt_ratio),
+        StructuredTool.from_function(calculate_interest_coverage_ratio),
 
-def calculate_operating_margin_ratio(operating_income: float, net_sales: float) -> float:
-    if net_sales == 0:
-        return 0.0
-    return operating_income / net_sales
+    ]
 
-def calculate_return_on_assets_ratio(net_income: float, total_assets: float) -> float:
-    if total_assets == 0:
-        return 0.0
-    return net_income / total_assets
+    # --- Initialize the LLM ---
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-thinking", google_api_key=os.getenv("GOOGLE_API_KEY"), convert_system_message_to_human=True) #or gemini-2.0-flash
+    llm_with_tools = llm.bind_tools(tools)
 
-def calculate_return_on_equity_ratio(net_income: float, shareholders_equity: float) -> float:
-    if shareholders_equity == 0:
-        return 0.0
-    return net_income / shareholders_equity
+    # --- Prompt Templates ---
+    # 1. Data Extraction Prompt
+    extraction_template = """
+    You are a financial analyst tasked with extracting key data from financial statements.
+    Please extract the following information from the provided document and output it in JSON format:
 
-def calculate_asset_turnover_ratio(net_sales: float, average_total_assets: float) -> float:
-    if average_total_assets == 0:
-        return 0.0
-    return net_sales / average_total_assets
-
-def calculate_inventory_turnover_ratio(cost_of_goods_sold: float, average_inventory: float) -> float:
-    if average_inventory == 0:
-        return 0.0
-    return cost_of_goods_sold / average_inventory
-
-def calculate_receivables_turnover_ratio(net_credit_sales: float, average_accounts_receivable: float) -> float:
-    if average_accounts_receivable == 0:
-        return 0.0
-    return net_credit_sales / average_accounts_receivable
-
-def calculate_debt_ratio(total_liabilities: float, total_assets: float) -> float:
-    if total_assets == 0:
-        return 0.0
-    return total_liabilities / total_assets
-
-def calculate_interest_coverage_ratio(operating_income: float, interest_expenses: float) -> float:
-    if interest_expenses == 0:
-        return float('inf')
-    return operating_income / interest_expenses
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-Python
-IGNORE_WHEN_COPYING_END
-
-Type Hinting: Use type hints (e.g., current_assets: float) for clarity and to help catch errors.
-
-Error Handling: Include basic error handling, especially for division by zero.
-
-Docstrings: Write clear docstrings explaining what each function does. This is crucial for the LLM to understand the tool's purpose.
-
-Step 4: LangChain Tool Integration
-
-Create another Python file (e.g., llm_chain.py). This is where you'll define your LangChain prompts and integrate the tools.
-
-# llm_chain.py
-import os
-from dotenv import load_dotenv
-import google.generativeai as genai
-from langchain.prompts import ChatPromptTemplate
-from langchain.tools import StructuredTool
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
-from financial_tools import *  # Import your financial tools
-
-load_dotenv()
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-
-# --- Define LangChain Tools from your functions ---
-tools = [
-    StructuredTool.from_function(calculate_current_ratio),
-    StructuredTool.from_function(calculate_debt_to_equity_ratio),
-    # ... add all your other tools here ...
-    StructuredTool.from_function(calculate_gross_margin_ratio),
-    StructuredTool.from_function(calculate_operating_margin_ratio),
-    StructuredTool.from_function(calculate_return_on_assets_ratio),
-    StructuredTool.from_function(calculate_return_on_equity_ratio),
-    StructuredTool.from_function(calculate_asset_turnover_ratio),
-    StructuredTool.from_function(calculate_inventory_turnover_ratio),
-    StructuredTool.from_function(calculate_receivables_turnover_ratio),
-    StructuredTool.from_function(calculate_debt_ratio),
-    StructuredTool.from_function(calculate_interest_coverage_ratio),
-
-]
-
-# --- Initialize the LLM ---
-llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-thinking", google_api_key=os.getenv("GOOGLE_API_KEY"), convert_system_message_to_human=True) #or gemini-2.0-flash
-llm_with_tools = llm.bind_tools(tools)
-
-# --- Prompt Templates ---
-# 1. Data Extraction Prompt
-extraction_template = """
-You are a financial analyst tasked with extracting key data from financial statements.
-Please extract the following information from the provided document and output it in JSON format:
-
-```json
-{{
-    "company_name": "",
-    "reporting_period": "",
-    "currency": "",
-    "income_statement": {{
-        "net_sales": ,
-        "cost_of_goods_sold": ,
-        "gross_profit": ,
-        "operating_expenses": ,
-        "operating_income": ,
-        "interest_expenses": ,
-        "net_income": 
-    }},
-    "balance_sheet": {{
-        "current_assets": ,
-        "total_assets": ,
-        "current_liabilities": ,
-        "total_liabilities": ,
-        "shareholders_equity": ,
-        "average_inventory": ,
-        "average_accounts_receivable":
-    }},
-    "notes": {{
-         "adj_ebitda_available": true/false,
-         "adj_ebitda_details": "...",
-         "adj_working_capital_available": true/false,
-         "adj_working_capital_details": "..."
+    ```json
+    {{
+        "company_name": "",
+        "reporting_period": "",
+        "currency": "",
+        "income_statement": {{
+            "net_sales": ,
+            "cost_of_goods_sold": ,
+            "gross_profit": ,
+            "operating_expenses": ,
+            "operating_income": ,
+            "interest_expenses": ,
+            "net_income": 
+        }},
+        "balance_sheet": {{
+            "current_assets": ,
+            "total_assets": ,
+            "current_liabilities": ,
+            "total_liabilities": ,
+            "shareholders_equity": ,
+            "average_inventory": ,
+            "average_accounts_receivable":
+        }},
+        "notes": {{
+             "adj_ebitda_available": true/false,
+             "adj_ebitda_details": "...",
+             "adj_working_capital_available": true/false,
+             "adj_working_capital_details": "..."
+        }}
     }}
-}}
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-Python
-IGNORE_WHEN_COPYING_END
-
-If any information is not available, leave the value blank of that particular key or write 0.
-If any key has units, then also add it beside the numeric value.
-"""
-extraction_prompt = ChatPromptTemplate.from_template(extraction_template)
-
-2. Ratio Calculation Prompt (using tools)
-
-ratio_template = """
-You are a financial analysis expert. Given the following extracted financial data,
-calculate the required financial ratios using the available tools.
-
-Extracted Data:
-{extracted_data}
-
-Calculate ALL of the following ratios and return the results and the input values used for those ratio calculations in JSON format:
-
-Current Ratio
-
-Debt to Equity Ratio
-
-Gross Margin Ratio
-
-Operating Margin Ratio
-
-Return on Assets Ratio
-
-Return on Equity Ratio
-
-Asset Turnover Ratio
-
-Inventory Turnover Ratio
-
-Receivables Turnover Ratio
-
-Debt Ratio
-
-Interest Coverage Ratio
-
-{{
-   "Current Ratio": {{ "current_assets": , "current_liabilities": , "ratio_value":  }},
-   "Debt to Equity Ratio": {{ "total_liabilities": , "shareholders_equity": , "ratio_value":  }},
-   "Gross Margin Ratio": {{ "gross_profit": , "net_sales": , "ratio_value":  }},
-   "Operating Margin Ratio": {{ "operating_income": , "net_sales": , "ratio_value":  }},
-   "Return on Assets Ratio": {{ "net_income": , "total_assets": , "ratio_value":  }},
-   "Return on Equity Ratio": {{ "net_income": , "shareholders_equity": , "ratio_value":  }},
-   "Asset Turnover Ratio": {{ "net_sales": , "average_total_assets": , "ratio_value":  }},
-   "Inventory Turnover Ratio": {{ "cost_of_goods_sold": , "average_inventory": , "ratio_value":  }},
-   "Receivables Turnover Ratio": {{ "net_credit_sales": , "average_accounts_receivable": , "ratio_value":  }},
-   "Debt Ratio": {{ "total_liabilities": , "total_assets": , "ratio_value":  }},
-   "Interest Coverage Ratio": {{"operating_income": , "interest_expenses":, "ratio_value": }}
-}}
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-Json
-IGNORE_WHEN_COPYING_END
-
-"""
-ratio_prompt = ChatPromptTemplate.from_template(ratio_template)
-
-3. Summary Generation Prompts (Separate prompts for each section)
-# 3.a Business Overview
-business_overview_template = """
-Based on the extracted financial data, provide a concise business overview:
-{extracted_data}
-
-Output just the business overview text, and no extra text.
-"""
-business_overview_prompt = ChatPromptTemplate.from_template(business_overview_template)
-
-# 3.b Key Findings
-key_findings_template = """
-Analyze the extracted data and calculated ratios, and provide key findings related to
-financial due diligence.  Focus on profitability, liquidity, solvency, key risks, and
-any notable trends.
-
-Extracted Data:
-{extracted_data}
-
-Calculated Ratios:
-{calculated_ratios}
-
-Output just the key findings text, and no extra text.
-"""
-key_findings_prompt = ChatPromptTemplate.from_template(key_findings_template)
-
-# 3.c Income Statement Overview
-income_statement_template = """
-Provide a summary of the income statement, highlighting key trends and performance indicators.
-
-Extracted Data (Income Statement):
-{income_statement_data}
-
-Output just the income statement overview text, and no extra text.
-"""
-income_statement_prompt = ChatPromptTemplate.from_template(income_statement_template)
-
-#3.d Balance Sheet Overview
-balance_sheet_template = """
-Provide a summary of the balance sheet, highlighting key trends and performance indicators.
-
-Extracted Data (Balance Sheet):
-{balance_sheet_data}
-
-Output just the balance sheet overview text, and no extra text.
-"""
-balance_sheet_prompt = ChatPromptTemplate.from_template(balance_sheet_template)
-
-#3.e Adj EBITDA Overview
-adj_ebitda_template = """
-Analyze the details regarding adjusted EBITDA:
-{adj_ebitda_details}
-
-Output just the Adjusted EBITDA Overview text, and no extra text.
-"""
-adj_ebitda_prompt = ChatPromptTemplate.from_template(adj_ebitda_template)
-
-#3.f Adj Working Capital Overview
-adj_working_capital_template = """
-    Analyze the details regarding adjusted Working Capital:
-    {adj_working_capital_details}
-
-    Output just the Adjusted Working Capital Overview text, and no extra text.
+    ```
+    If any information is not available, leave the value blank of that particular key or write 0.
+    If any key has units, then also add it beside the numeric value.
     """
-adj_working_capital_prompt = ChatPromptTemplate.from_template(adj_working_capital_template)
+    extraction_prompt = ChatPromptTemplate.from_template(extraction_template)
 
-# --- Chain Definition ---
+    # 2. Ratio Calculation Prompt (using tools)
+    ratio_template = """
+    You are a financial analysis expert. Given the following extracted financial data,
+    calculate the required financial ratios using the available tools.
 
-# 1. Data Extraction Chain
-extraction_chain = extraction_prompt | llm_with_tools | JsonOutputParser()
+    Extracted Data:
+    {extracted_data}
 
-# 2. Ratio Calculation Chain
-ratio_chain = ratio_prompt | llm_with_tools | JsonOutputParser()
+    Calculate ALL of the following ratios and return the results and the input values used for those ratio calculations in JSON format:
+    - Current Ratio
+    - Debt to Equity Ratio
+    - Gross Margin Ratio
+    - Operating Margin Ratio
+    - Return on Assets Ratio
+    - Return on Equity Ratio
+    - Asset Turnover Ratio
+    - Inventory Turnover Ratio
+    - Receivables Turnover Ratio
+    - Debt Ratio
+    - Interest Coverage Ratio
 
-# 3. Summary Chains
-business_overview_chain = business_overview_prompt | llm | StrOutputParser()
-key_findings_chain = key_findings_prompt | llm | StrOutputParser()
-income_statement_chain = income_statement_prompt | llm | StrOutputParser()
-balance_sheet_chain = balance_sheet_prompt | llm | StrOutputParser()
-adj_ebitda_chain = adj_ebitda_prompt | llm | StrOutputParser()
-adj_working_capital_chain = adj_working_capital_prompt | llm | StrOutputParser()
-
-
-
-# --- Main Function for Processing ---
-def process_financial_document(file_content, file_type):
-    """Processes a financial document and returns the analysis results."""
-
-    # Create a LangChain "Part" object for the document.
-    part = genai.Part(data=file_content, mime_type=file_type)
-    # 1. Extract Data
-    extracted_data = extraction_chain.invoke({"input": [part]})
-    #print(extracted_data)
-
-    #2. Check for adj_ebitda and adj_working_capital
-    adj_ebitda_available = extracted_data.get("notes", {}).get("adj_ebitda_available", False)
-    adj_working_capital_available = extracted_data.get("notes", {}).get("adj_working_capital_available", False)
-    adj_ebitda_details = extracted_data.get("notes",{}).get("adj_ebitda_details","")
-    adj_working_capital_details = extracted_data.get("notes",{}).get("adj_working_capital_details","")
-    # 3. Calculate Ratios
-    calculated_ratios = ratio_chain.invoke({"extracted_data": extracted_data})
-    #print(calculated_ratios)
-
-    # 4. Generate Summaries
-
-    business_overview = business_overview_chain.invoke({"extracted_data": extracted_data})
-    key_findings = key_findings_chain.invoke({"extracted_data": extracted_data, "calculated_ratios": calculated_ratios})
-    income_statement_overview = income_statement_chain.invoke({"income_statement_data": extracted_data["income_statement"]})
-    balance_sheet_overview = balance_sheet_chain.invoke({"balance_sheet_data": extracted_data["balance_sheet"]})
-    if adj_ebitda_available:
-        adj_ebitda_overview = adj_ebitda_chain.invoke({"adj_ebitda_details":adj_ebitda_details})
-    else:
-        adj_ebitda_overview = "Adjusted EBITDA information not available in the provided document."
-
-    if adj_working_capital_available:
-        adj_working_capital_overview = adj_working_capital_chain.invoke({"adj_working_capital_details":adj_working_capital_details})
-    else:
-        adj_working_capital_overview = "Adjusted Working Capital information not available in the provided document."
+     ```json
+    {{
+        "Current Ratio": {{ "current_assets": , "current_liabilities": , "ratio_value":  }},
+        "Debt to Equity Ratio": {{ "total_liabilities": , "shareholders_equity": , "ratio_value":  }},
+        "Gross Margin Ratio": {{ "gross_profit": , "net_sales": , "ratio_value":  }},
+        "Operating Margin Ratio": {{ "operating_income": , "net_sales": , "ratio_value":  }},
+        "Return on Assets Ratio": {{ "net_income": , "total_assets": , "ratio_value":  }},
+        "Return on Equity Ratio": {{ "net_income": , "shareholders_equity": , "ratio_value":  }},
+        "Asset Turnover Ratio": {{ "net_sales": , "average_total_assets": , "ratio_value":  }},
+        "Inventory Turnover Ratio": {{ "cost_of_goods_sold": , "average_inventory": , "ratio_value":  }},
+        "Receivables Turnover Ratio": {{ "net_credit_sales": , "average_accounts_receivable": , "ratio_value":  }},
+        "Debt Ratio": {{ "total_liabilities": , "total_assets": , "ratio_value":  }},
+        "Interest Coverage Ratio": {{"operating_income": , "interest_expenses":, "ratio_value": }}
+    }}
+    ```
+    """
+    ratio_prompt = ChatPromptTemplate.from_template(ratio_template)
 
 
-    # 5. Combine Results into a single JSON object
-    final_results = {
-        "business_overview": business_overview,
-        "key_findings": key_findings,
-        "income_statement_overview": income_statement_overview,
-        "balance_sheet_overview": balance_sheet_overview,
-        "adj_ebitda_overview": adj_ebitda_overview,
-        "adj_working_capital_overview": adj_working_capital_overview,
-        "extracted_data": extracted_data,
-        "calculated_ratios": calculated_ratios
-    }
+   # 3.  Summary Generation Prompts (Separate prompts for each section)
 
-    return final_results
-```
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-IGNORE_WHEN_COPYING_END
+    # 3.a Business Overview
+    business_overview_template = """
+    Based on the extracted financial data, provide a concise business overview:
+    {extracted_data}
+
+    Output just the business overview text, and no extra text.
+    """
+    business_overview_prompt = ChatPromptTemplate.from_template(business_overview_template)
+
+    # 3.b Key Findings
+    key_findings_template = """
+    Analyze the extracted data and calculated ratios, and provide key findings related to
+    financial due diligence.  Focus on profitability, liquidity, solvency, key risks, and
+    any notable trends.
+
+    Extracted Data:
+    {extracted_data}
+
+    Calculated Ratios:
+    {calculated_ratios}
+
+    Output just the key findings text, and no extra text.
+    """
+    key_findings_prompt = ChatPromptTemplate.from_template(key_findings_template)
+
+    # 3.c Income Statement Overview
+    income_statement_template = """
+    Provide a summary of the income statement, highlighting key trends and performance indicators.
+
+    Extracted Data (Income Statement):
+    {income_statement_data}
+
+    Output just the income statement overview text, and no extra text.
+    """
+    income_statement_prompt = ChatPromptTemplate.from_template(income_statement_template)
+
+    #3.d Balance Sheet Overview
+    balance_sheet_template = """
+    Provide a summary of the balance sheet, highlighting key trends and performance indicators.
+
+    Extracted Data (Balance Sheet):
+    {balance_sheet_data}
+
+    Output just the balance sheet overview text, and no extra text.
+    """
+    balance_sheet_prompt = ChatPromptTemplate.from_template(balance_sheet_template)
+    
+    #3.e Adj EBITDA Overview
+    adj_ebitda_template = """
+    Analyze the details regarding adjusted EBITDA:
+    {adj_ebitda_details}
+
+    Output just the Adjusted EBITDA Overview text, and no extra text.
+    """
+    adj_ebitda_prompt = ChatPromptTemplate.from_template(adj_ebitda_template)
+
+    #3.f Adj Working Capital Overview
+    adj_working_capital_template = """
+        Analyze the details regarding adjusted Working Capital:
+        {adj_working_capital_details}
+    
+        Output just the Adjusted Working Capital Overview text, and no extra text.
+        """
+    adj_working_capital_prompt = ChatPromptTemplate.from_template(adj_working_capital_template)
+
+    # --- Chain Definition ---
+
+    # 1. Data Extraction Chain
+    extraction_chain = extraction_prompt | llm_with_tools | JsonOutputParser()
+
+    # 2. Ratio Calculation Chain
+    ratio_chain = ratio_prompt | llm_with_tools | JsonOutputParser()
+
+    # 3. Summary Chains
+    business_overview_chain = business_overview_prompt | llm | StrOutputParser()
+    key_findings_chain = key_findings_prompt | llm | StrOutputParser()
+    income_statement_chain = income_statement_prompt | llm | StrOutputParser()
+    balance_sheet_chain = balance_sheet_prompt | llm | StrOutputParser()
+    adj_ebitda_chain = adj_ebitda_prompt | llm | StrOutputParser()
+    adj_working_capital_chain = adj_working_capital_prompt | llm | StrOutputParser()
+
+
+
+    # --- Main Function for Processing ---
+    def process_financial_document(file_content, file_type):
+        """Processes a financial document and returns the analysis results."""
+
+        # Create a LangChain "Part" object for the document.
+        part = genai.Part(data=file_content, mime_type=file_type)
+        # 1. Extract Data
+        extracted_data = extraction_chain.invoke({"input": [part]})
+        #print(extracted_data)
+
+        #2. Check for adj_ebitda and adj_working_capital
+        adj_ebitda_available = extracted_data.get("notes", {}).get("adj_ebitda_available", False)
+        adj_working_capital_available = extracted_data.get("notes", {}).get("adj_working_capital_available", False)
+        adj_ebitda_details = extracted_data.get("notes",{}).get("adj_ebitda_details","")
+        adj_working_capital_details = extracted_data.get("notes",{}).get("adj_working_capital_details","")
+        # 3. Calculate Ratios
+        calculated_ratios = ratio_chain.invoke({"extracted_data": extracted_data})
+        #print(calculated_ratios)
+
+        # 4. Generate Summaries
+
+        business_overview = business_overview_chain.invoke({"extracted_data": extracted_data})
+        key_findings = key_findings_chain.invoke({"extracted_data": extracted_data, "calculated_ratios": calculated_ratios})
+        income_statement_overview = income_statement_chain.invoke({"income_statement_data": extracted_data["income_statement"]})
+        balance_sheet_overview = balance_sheet_chain.invoke({"balance_sheet_data": extracted_data["balance_sheet"]})
+        if adj_ebitda_available:
+            adj_ebitda_overview = adj_ebitda_chain.invoke({"adj_ebitda_details":adj_ebitda_details})
+        else:
+            adj_ebitda_overview = "Adjusted EBITDA information not available in the provided document."
+
+        if adj_working_capital_available:
+            adj_working_capital_overview = adj_working_capital_chain.invoke({"adj_working_capital_details":adj_working_capital_details})
+        else:
+            adj_working_capital_overview = "Adjusted Working Capital information not available in the provided document."
+
+
+        # 5. Combine Results into a single JSON object
+        final_results = {
+            "business_overview": business_overview,
+            "key_findings": key_findings,
+            "income_statement_overview": income_statement_overview,
+            "balance_sheet_overview": balance_sheet_overview,
+            "adj_ebitda_overview": adj_ebitda_overview,
+            "adj_working_capital_overview": adj_working_capital_overview,
+            "extracted_data": extracted_data,
+            "calculated_ratios": calculated_ratios
+        }
+
+        return final_results
+    ```
 
 Key improvements and explanations in this code:
 
-Tool Integration: The StructuredTool.from_function() call wraps each of your calculation functions, making them available to the LLM.
+*   **Tool Integration:**  The `StructuredTool.from_function()` call wraps each of your calculation functions, making them available to the LLM.
+*   **LLM Binding:**  `llm.bind_tools(tools)` creates a new LLM instance that is *aware* of your tools.  This is crucial.  The LLM will now include tool calls in its output when appropriate.
+*   **Prompt Templates (Multiple):** We've defined separate, well-structured prompts for:
+    *   **Data Extraction:**  Asks the LLM to extract specific data points and format them as JSON.  This is the most critical prompt.
+    *   **Ratio Calculation:**  Provides the extracted data to the LLM and instructs it to use the available *tools* to calculate the ratios.  This prompt receives the *output* of the extraction prompt.
+    *   **Summary Generation (x5):** Separate prompts for each section of the final report.  These prompts are designed to generate concise, human-readable text.
+*   **Chain Definition:**  We use LangChain's simple chaining syntax (`|`) to connect the prompts and the LLM.  The output of one step becomes the input of the next.
+*   **Output Parsers:**
+    *    `JsonOutputParser()`: Used for extraction and ratio chains, as their output from the LLM is expected to be in JSON format.
+    *   `StrOutputParser()`: Used for summary chains to get the raw text output.
+*   **`process_financial_document` Function:** This is the main function that orchestrates the entire process:
+    1.  Takes the file content and type as input.
+    2.  Calls the `extraction_chain` to get the initial data.
+    3.  Calls the `ratio_chain` to calculate ratios, passing in the extracted data.
+    4.  Calls the summary chains to generate the report sections.
+    5.  Combines *everything* into a single, comprehensive JSON object.
+*   **JSON Output:** The entire analysis result is returned as a single JSON object.  This is *essential* for:
+    *   **Frontend Integration:**  Streamlit (and later, Next.js) can easily consume this JSON to display the results in a structured way.
+    *   **Report Generation:**  You'll use this JSON to generate the final PDF report.
+* **Adj EBITDA and Working Capital:** Added handling of the `adj_ebitda_available` and `adj_working_capital_available` from the notes section of the extracted data to conditionally generate overviews for Adj EBITDA and Adj Working Capital.
 
-LLM Binding: llm.bind_tools(tools) creates a new LLM instance that is aware of your tools. This is crucial. The LLM will now include tool calls in its output when appropriate.
+**Step 5: Streamlit Frontend**
 
-Prompt Templates (Multiple): We've defined separate, well-structured prompts for:
-
-Data Extraction: Asks the LLM to extract specific data points and format them as JSON. This is the most critical prompt.
-
-Ratio Calculation: Provides the extracted data to the LLM and instructs it to use the available tools to calculate the ratios. This prompt receives the output of the extraction prompt.
-
-Summary Generation (x5): Separate prompts for each section of the final report. These prompts are designed to generate concise, human-readable text.
-
-Chain Definition: We use LangChain's simple chaining syntax (|) to connect the prompts and the LLM. The output of one step becomes the input of the next.
-
-Output Parsers:
-
-JsonOutputParser(): Used for extraction and ratio chains, as their output from the LLM is expected to be in JSON format.
-
-StrOutputParser(): Used for summary chains to get the raw text output.
-
-process_financial_document Function: This is the main function that orchestrates the entire process:
-
-Takes the file content and type as input.
-
-Calls the extraction_chain to get the initial data.
-
-Calls the ratio_chain to calculate ratios, passing in the extracted data.
-
-Calls the summary chains to generate the report sections.
-
-Combines everything into a single, comprehensive JSON object.
-
-JSON Output: The entire analysis result is returned as a single JSON object. This is essential for:
-
-Frontend Integration: Streamlit (and later, Next.js) can easily consume this JSON to display the results in a structured way.
-
-Report Generation: You'll use this JSON to generate the final PDF report.
-
-Adj EBITDA and Working Capital: Added handling of the adj_ebitda_available and adj_working_capital_available from the notes section of the extracted data to conditionally generate overviews for Adj EBITDA and Adj Working Capital.
-
-Step 5: Streamlit Frontend
-
+```python
 # app.py
 import streamlit as st
 from llm_chain import process_financial_document  # Import your processing function
@@ -653,55 +562,39 @@ if uploaded_file is not None:
     with st.spinner("Generating PDF report..."):
         pdf_report = generate_pdf_report(analysis_results)
         st.markdown(get_pdf_download_link(pdf_report.read(), "financial_analysis_report.pdf"), unsafe_allow_html=True)
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-Python
-IGNORE_WHEN_COPYING_END
+
+```
 
 Key features of the Streamlit app:
 
-File Uploader: Allows the user to upload a file (PDF, CSV, or image).
+*   **File Uploader:**  Allows the user to upload a file (PDF, CSV, or image).
+*   **File Type Handling:** Correctly determines the file type and reads the content as bytes.
+*   **Processing Call:**  Calls your `process_financial_document` function with the file content and type.
+*   **Result Display:**  Displays the JSON output from the analysis. This is good for debugging and showing the raw data.  You can improve the formatting later.
+*   **PDF Generation:** Uses the `generate_pdf_report` function (defined below) to create a PDF.
+* **ReportLab PDF Generation** Included a basic report generation function.
 
-File Type Handling: Correctly determines the file type and reads the content as bytes.
+**Step 6: PDF Report Generation**
 
-Processing Call: Calls your process_financial_document function with the file content and type.
+*   The `generate_pdf_report` function uses the `reportlab` library to create a basic PDF report from the JSON data.  This is a *very simple* example.  You'll need to customize this significantly to match the desired output format from the hackathon problem statement:
 
-Result Display: Displays the JSON output from the analysis. This is good for debugging and showing the raw data. You can improve the formatting later.
+    *   **Structure:**  Add sections for Business Overview, Key Findings, Income Statement Overview, Balance Sheet Overview, Adj EBITDA, and Adj Working Capital.
+    *   **Formatting:** Use appropriate headings, fonts, and spacing.
+    *   **Tables:**  Present the extracted data and calculated ratios in well-formatted tables. ReportLab provides excellent table styling options.
+    *   **Error Handling:**  Add error handling in case certain data is missing from the JSON.
 
-PDF Generation: Uses the generate_pdf_report function (defined below) to create a PDF.
+**Step 7: Testing and Refinement**
 
-ReportLab PDF Generation Included a basic report generation function.
+*   **Test with Sample Data:**  Use the provided sample input document to test the entire pipeline thoroughly.
+*   **Iterate on Prompts:**  Refine your prompts based on the results.  Prompt engineering is an iterative process.  Pay close attention to:
+    *   **Clarity:**  Make sure the instructions are unambiguous.
+    *   **Specificity:**  Be precise about what you want the LLM to extract and how to format the output.
+    *   **Tool Usage:**  Observe how the LLM uses the tools.  If it's not using them correctly, adjust the prompts or tool descriptions.
+*   **Error Handling:**  Test with various edge cases (missing data, unusual formatting) to ensure your code is robust.
 
-Step 6: PDF Report Generation
+**3. Requirements Document (for LLM and Team)**
 
-The generate_pdf_report function uses the reportlab library to create a basic PDF report from the JSON data. This is a very simple example. You'll need to customize this significantly to match the desired output format from the hackathon problem statement:
-
-Structure: Add sections for Business Overview, Key Findings, Income Statement Overview, Balance Sheet Overview, Adj EBITDA, and Adj Working Capital.
-
-Formatting: Use appropriate headings, fonts, and spacing.
-
-Tables: Present the extracted data and calculated ratios in well-formatted tables. ReportLab provides excellent table styling options.
-
-Error Handling: Add error handling in case certain data is missing from the JSON.
-
-Step 7: Testing and Refinement
-
-Test with Sample Data: Use the provided sample input document to test the entire pipeline thoroughly.
-
-Iterate on Prompts: Refine your prompts based on the results. Prompt engineering is an iterative process. Pay close attention to:
-
-Clarity: Make sure the instructions are unambiguous.
-
-Specificity: Be precise about what you want the LLM to extract and how to format the output.
-
-Tool Usage: Observe how the LLM uses the tools. If it's not using them correctly, adjust the prompts or tool descriptions.
-
-Error Handling: Test with various edge cases (missing data, unusual formatting) to ensure your code is robust.
-
-3. Requirements Document (for LLM and Team)
-
+```
 Project: AI-Driven Financial Statement Analysis
 
 Goal: Develop a platform that automates the extraction, analysis, and interpretation of financial data from various financial documents, generating a comprehensive summary report.
@@ -746,6 +639,7 @@ Technical Implementation:
 *   Programming Language: Python
 *   LLM: Google Gemini 2.0 Flash and Gemini 2.0 Flash Thinking (for reasoning)
 *   Libraries:
+```python
     *   google-generativeai: For interacting with the Gemini API.
     *   langchain: For prompt engineering, tool definition, and LLM chaining.
     *   streamlit: For the initial frontend.
@@ -859,8 +753,9 @@ Example JSON Output Structure (Conceptual):
         ...
     }
 }
+```
 
-
-This document provides a complete specification for the AI-Driven Financial Statement Analysis project. It includes all the requirements, technical details, and step-by-step instructions needed for development. It is designed to be understandable by both the development team and a new instance of an LLM.
+This document provides a complete specification for the AI-Driven Financial Statement Analysis project.  It includes all the requirements, technical details, and step-by-step instructions needed for development.  It is designed to be understandable by both the development team and a new instance of an LLM.
+```
 
 This completes the requirements document, including the architecture, development steps, prompt breakdown, and example JSON structure. This should provide a solid foundation for you and your team to build the application and should be detailed enough to give to a new LLM instance for assistance. Remember to continually test and iterate, particularly on your prompts, as you develop. Good luck with the hackathon!
