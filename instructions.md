@@ -594,7 +594,7 @@ Key features of the Streamlit app:
 
 **3. Requirements Document (for LLM and Team)**
 
-```
+
 Project: AI-Driven Financial Statement Analysis
 
 Goal: Develop a platform that automates the extraction, analysis, and interpretation of financial data from various financial documents, generating a comprehensive summary report.
