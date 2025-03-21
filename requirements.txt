@@ -12,3 +12,4 @@ reportlab
 python-multipart
 google-genai
 uvicorn
+matplotlib
