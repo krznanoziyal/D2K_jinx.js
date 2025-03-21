@@ -36,26 +36,18 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "session_id" not in st.session_state:
     st.session_state.session_id = None
-if "document_uploaded" not in st.session_state:
-    st.session_state.document_uploaded = False
-if "document_name" not in st.session_state:
-    st.session_state.document_name = None
+if "documents" not in st.session_state:
+    st.session_state.documents = []
 
 # Function to handle regular chat
 def process_chat(prompt):
     try:
         with st.spinner("Thinking..."):
-            # Prepare chat history for the API
-            chat_messages = [{"role": msg["role"], "content": msg["content"]} for msg in st.session_state.messages]
-            
-            # Add the current message
-            chat_messages.append({"role": "user", "content": prompt})
-            
             # Call the API
             response = httpx.post(
                 "http://127.0.0.1:8000/chat",
                 json={
-                    "messages": chat_messages,
+                    "messages": [{"role": "user", "content": prompt}],
                     "session_id": st.session_state.session_id
                 },
                 timeout=60.0
@@ -85,7 +77,7 @@ def process_document_chat(file, prompt):
             
             # Call the API
             response = httpx.post(
-                "http://127.0.0.1:8000/chat_with_document",
+                "http://127.0.0.1:8000/upload_document",  # Updated endpoint name
                 files=files,
                 data=form_data,
                 timeout=120.0  # Longer timeout for document processing
@@ -94,8 +86,9 @@ def process_document_chat(file, prompt):
             if response.status_code == 200:
                 data = response.json()
                 st.session_state.session_id = data["session_id"]
-                st.session_state.document_uploaded = True
-                st.session_state.document_name = file.name
+                # Add document to the list of uploaded documents
+                if file.name not in st.session_state.documents:
+                    st.session_state.documents.append(file.name)
                 return data["response"]
             else:
                 st.error(f"Error: {response.text}")
@@ -121,8 +114,11 @@ with st.sidebar:
     if uploaded_file is not None:
         st.success(f"File '{uploaded_file.name}' is ready for analysis")
     
-    if st.session_state.document_uploaded:
-        st.info(f"Currently analyzing: {st.session_state.document_name}")
+    # Show all documents in the current session
+    if st.session_state.documents:
+        st.header("Uploaded Documents")
+        for doc in st.session_state.documents:
+            st.info(f"📄 {doc}")
     
     st.header("About")
     st.markdown("This is a prototype for an AI-driven Financial Statement Analysis Platform.")
@@ -132,8 +128,7 @@ with st.sidebar:
     if st.button("Clear Conversation"):
         st.session_state.messages = []
         st.session_state.session_id = None
-        st.session_state.document_uploaded = False
-        st.session_state.document_name = None
+        st.session_state.documents = []
         st.experimental_rerun()
 
 # Chat input section
@@ -147,8 +142,8 @@ if prompt:
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     
-    # Process file if it was uploaded alongside the prompt
-    if uploaded_file and not st.session_state.document_uploaded:
+    # Process file if it was just uploaded
+    if uploaded_file and uploaded_file.name not in st.session_state.documents:
         response_text = process_document_chat(uploaded_file, prompt)
     else:
         response_text = process_chat(prompt)
