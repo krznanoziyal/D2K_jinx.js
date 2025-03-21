@@ -1,11 +1,13 @@
 from langchain_google_genai import GoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
-from langchain.chains import LLMChain, SequentialChain
-from langchain.output_parsers import ResponseSchema, StructuredOutputParser
-from typing import Dict, Any, List, Optional
+from langchain.chains import LLMChain
+from typing import Dict, Any
 from dotenv import load_dotenv
 import os
 import json
+import re
+import logging
+import time
 from financial_tools import (
     calculate_current_ratio, calculate_debt_to_equity_ratio,
     calculate_gross_margin_ratio, calculate_operating_margin_ratio,
@@ -22,60 +24,38 @@ class LangChainHandler:
     
     def __init__(self):
         # Use gemini-2.0-flash for data extraction and gemini-2.0-flash-thinking for reasoning
-        self.extraction_llm = GoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.1)
-        self.analysis_llm = GoogleGenerativeAI(model="gemini-2.0-flash-thinking-exp-01-21", temperature=0.2)
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY environment variable is not set")
+            
+        self.extraction_llm = GoogleGenerativeAI(
+            model="gemini-2.0-flash", 
+            temperature=0.1,
+            google_api_key=api_key
+        )
+        self.analysis_llm = GoogleGenerativeAI(
+            model="gemini-2.0-flash-thinking-exp-01-21", 
+            temperature=0.2,
+            google_api_key=api_key
+        )
         
-        # Define the output schemas and parsers
-        self._setup_parsers()
-        
-        # Create the extraction chain
+        # Setup the extraction chain
         self._setup_extraction_chain()
         
-    def _setup_parsers(self):
-        """Set up output parsers for structured data"""
-        # Financial data extraction schema
-        self.financial_data_schema = {
-            "company_name": "Name of the company",
-            "reporting_period": "Reporting period of the financial statement",
-            "currency": "Currency used in the financial statement",
-            "income_statement": {
-                "net_sales": "Total net sales or revenue",
-                "cost_of_goods_sold": "Cost of goods sold",
-                "gross_profit": "Gross profit",
-                "operating_expenses": "Operating expenses",
-                "operating_income": "Operating income",
-                "interest_expenses": "Interest expenses",
-                "net_income": "Net income"
-            },
-            "balance_sheet": {
-                "cash_and_equivalents": "Cash and cash equivalents",
-                "current_assets": "Total current assets",
-                "total_assets": "Total assets",
-                "current_liabilities": "Total current liabilities",
-                "total_liabilities": "Total liabilities",
-                "shareholders_equity": "Total shareholders' equity",
-                "average_inventory": "Average inventory for the period",
-                "average_accounts_receivable": "Average accounts receivable for the period"
-            },
-            "notes": {
-                "adj_ebitda_available": "Whether adjusted EBITDA information is available (true/false)",
-                "adj_ebitda_details": "Details about adjusted EBITDA if available",
-                "adj_working_capital_available": "Whether adjusted working capital information is available (true/false)",
-                "adj_working_capital_details": "Details about adjusted working capital if available"
-            }
-        }
-    
+        # Setup the analysis chains
+        self._setup_analysis_chains()
+        
     def _setup_extraction_chain(self):
         """Set up the extraction chain for financial data"""
         extraction_template = """You are a financial analyst tasked with extracting key data from financial statements.
 Please extract the following information from the provided document and output it in JSON format:
 
 ```json
-{{
+{
 "company_name": "",
 "reporting_period": "",
 "currency": "",
-"income_statement": {{
+"income_statement": {
 "net_sales": null,
 "cost_of_goods_sold": null,
 "gross_profit": null,
@@ -83,8 +63,8 @@ Please extract the following information from the provided document and output i
 "operating_income": null,
 "interest_expenses": null,
 "net_income": null
-}},
-"balance_sheet": {{
+},
+"balance_sheet": {
 "cash_and_equivalents": null,
 "current_assets": null,
 "total_assets": null,
@@ -93,14 +73,14 @@ Please extract the following information from the provided document and output i
 "shareholders_equity": null,
 "average_inventory": null,
 "average_accounts_receivable": null
-}},
-"notes": {{
+},
+"notes": {
 "adj_ebitda_available": false,
 "adj_ebitda_details": "",
 "adj_working_capital_available": false,
 "adj_working_capital_details": ""
-}}
-}}
+}
+}
 ```
 
 If any information is not available, use null for that value.
@@ -108,8 +88,10 @@ If numbers have units (like thousands or millions), make sure to convert them to
 If you see values for multiple years, use the most recent year's data.
 For average values (like average inventory), calculate them if provided with beginning and ending values, or use the most recent value if only one is available.
 
-Document content:
-{document_content}"""
+The financial document content is as follows:
+{document_content}
+
+Remember to format your response ONLY as valid JSON within the ```json and ``` tags. Do not add any additional explanation before or after the JSON."""
         
         self.extraction_prompt = ChatPromptTemplate.from_template(extraction_template)
         self.extraction_chain = LLMChain(
@@ -118,7 +100,45 @@ Document content:
             output_key="extracted_data",
             verbose=True
         )
+    
+    def _setup_analysis_chains(self):
+        """Set up chains for business overview and key findings"""
+        # Business overview template
+        overview_template = """Based on the extracted financial data, provide a concise business overview:
+{extracted_data}
+
+If there is no data available, indicate that the financial information is insufficient to provide an overview.
+Output only the business overview text."""
         
+        self.overview_prompt = ChatPromptTemplate.from_template(overview_template)
+        self.overview_chain = LLMChain(
+            llm=self.analysis_llm,
+            prompt=self.overview_prompt,
+            output_key="business_overview",
+            verbose=True
+        )
+        
+        # Key findings template
+        findings_template = """Analyze the following extracted financial data and calculated ratios, and provide key findings 
+with focus on profitability, liquidity, solvency, and any notable trends:
+
+Extracted Data:
+{extracted_data}
+
+Calculated Ratios:
+{calculated_ratios}
+
+If data is insufficient, please indicate what specific information is missing that would be needed for a proper analysis.
+Output only the key findings text."""
+        
+        self.findings_prompt = ChatPromptTemplate.from_template(findings_template)
+        self.findings_chain = LLMChain(
+            llm=self.analysis_llm,
+            prompt=self.findings_prompt,
+            output_key="key_findings",
+            verbose=True
+        )
+    
     def calculate_financial_ratios(self, data: Dict) -> Dict:
         """Calculate financial ratios using the extracted data"""
         # Extract relevant financial data
@@ -148,67 +168,79 @@ Document content:
         # Calculate average_total_assets as total_assets if not provided
         average_total_assets = total_assets
         
+        # Helper function to safely calculate ratios
+        def safe_calculate(func, numerator, denominator, default=None):
+            try:
+                if denominator == 0:
+                    return default
+                return func(numerator, denominator)
+            except Exception:
+                return default
+        
         # Calculate all ratios using our financial_tools.py functions
         ratios = {
             "Current Ratio": {
                 "current_assets": current_assets,
                 "current_liabilities": current_liabilities,
-                "ratio_value": calculate_current_ratio(current_assets, current_liabilities)
+                "ratio_value": safe_calculate(calculate_current_ratio, current_assets, current_liabilities, "N/A")
             },
             "Cash Ratio": {
                 "cash_and_equivalents": cash_and_equivalents,
                 "current_liabilities": current_liabilities,
-                "ratio_value": calculate_current_ratio(cash_and_equivalents, current_liabilities)
+                "ratio_value": safe_calculate(
+                    lambda cash, liab: cash / liab if liab != 0 else "N/A",
+                    cash_and_equivalents, current_liabilities, "N/A"
+                )
             },
             "Debt to Equity Ratio": {
                 "total_liabilities": total_liabilities,
                 "shareholders_equity": shareholders_equity,
-                "ratio_value": calculate_debt_to_equity_ratio(total_liabilities, shareholders_equity)
+                "ratio_value": safe_calculate(calculate_debt_to_equity_ratio, total_liabilities, shareholders_equity, "N/A")
             },
             "Gross Margin Ratio": {
                 "gross_profit": gross_profit,
                 "net_sales": net_sales,
-                "ratio_value": calculate_gross_margin_ratio(gross_profit, net_sales)
+                "ratio_value": safe_calculate(calculate_gross_margin_ratio, gross_profit, net_sales, "N/A")
             },
             "Operating Margin Ratio": {
                 "operating_income": operating_income,
                 "net_sales": net_sales,
-                "ratio_value": calculate_operating_margin_ratio(operating_income, net_sales)
+                "ratio_value": safe_calculate(calculate_operating_margin_ratio, operating_income, net_sales, "N/A")
             },
             "Return on Assets Ratio": {
                 "net_income": net_income,
                 "total_assets": total_assets,
-                "ratio_value": calculate_return_on_assets_ratio(net_income, total_assets)
+                "ratio_value": safe_calculate(calculate_return_on_assets_ratio, net_income, total_assets, "N/A")
             },
             "Return on Equity Ratio": {
                 "net_income": net_income,
                 "shareholders_equity": shareholders_equity,
-                "ratio_value": calculate_return_on_equity_ratio(net_income, shareholders_equity)
+                "ratio_value": safe_calculate(calculate_return_on_equity_ratio, net_income, shareholders_equity, "N/A")
             },
             "Asset Turnover Ratio": {
                 "net_sales": net_sales,
                 "average_total_assets": average_total_assets,
-                "ratio_value": calculate_asset_turnover_ratio(net_sales, average_total_assets)
+                "ratio_value": safe_calculate(calculate_asset_turnover_ratio, net_sales, average_total_assets, "N/A")
             },
             "Inventory Turnover Ratio": {
                 "cost_of_goods_sold": cost_of_goods_sold,
                 "average_inventory": average_inventory,
-                "ratio_value": calculate_inventory_turnover_ratio(cost_of_goods_sold, average_inventory)
+                "ratio_value": safe_calculate(calculate_inventory_turnover_ratio, cost_of_goods_sold, average_inventory, "N/A")
             },
             "Receivables Turnover Ratio": {
                 "net_credit_sales": net_credit_sales,
                 "average_accounts_receivable": average_accounts_receivable,
-                "ratio_value": calculate_receivables_turnover_ratio(net_credit_sales, average_accounts_receivable)
+                "ratio_value": safe_calculate(calculate_receivables_turnover_ratio, net_credit_sales, average_accounts_receivable, "N/A")
             },
             "Debt Ratio": {
                 "total_liabilities": total_liabilities,
                 "total_assets": total_assets,
-                "ratio_value": calculate_debt_ratio(total_liabilities, total_assets)
+                "ratio_value": safe_calculate(calculate_debt_ratio, total_liabilities, total_assets, "N/A")
             },
             "Interest Coverage Ratio": {
                 "operating_income": operating_income,
                 "interest_expenses": interest_expenses,
-                "ratio_value": calculate_interest_coverage_ratio(operating_income, interest_expenses)
+                "ratio_value": safe_calculate(calculate_interest_coverage_ratio, operating_income, interest_expenses, "N/A")
             }
         }
         
@@ -225,74 +257,106 @@ Document content:
             Dict with extracted financial data and calculated ratios
         """
         try:
+            # Validate input
+            if not document_content or len(document_content.strip()) == 0:
+                raise ValueError("Document content is empty")
+                
+            logging.info(f"Starting financial document analysis. Document length: {len(document_content)} characters")
+            start_time = time.time()
+            
             # Step 1: Extract financial data
+            logging.info("Step 1: Extracting financial data...")
             extraction_result = self.extraction_chain.invoke({"document_content": document_content})
+            
+            logging.info(f"Raw extraction result: {extraction_result['extracted_data'][:200]}...")
             
             # Convert the string JSON to a Python dict
             try:
+                # First try direct JSON parsing
                 extracted_data = json.loads(extraction_result["extracted_data"])
+                logging.info("Successfully parsed JSON directly")
             except json.JSONDecodeError:
-                # If JSON parsing fails, try to extract JSON from the response text
-                import re
+                # If that fails, try to extract JSON from the response text
+                logging.info("Direct JSON parsing failed, trying to extract JSON from text")
                 json_match = re.search(r'```json\s*(.*?)\s*```', extraction_result["extracted_data"], re.DOTALL)
                 if json_match:
-                    extracted_data = json.loads(json_match.group(1))
+                    try:
+                        extracted_data = json.loads(json_match.group(1))
+                        logging.info("Successfully extracted and parsed JSON from text")
+                    except json.JSONDecodeError as e:
+                        logging.error(f"JSON parsing error after extraction: {e}")
+                        raise ValueError(f"Invalid JSON format after extraction: {e}")
                 else:
-                    raise ValueError("Failed to extract valid JSON from LLM response")
-            
+                    # If no JSON block found, provide a fallback empty structure
+                    logging.error("No valid JSON found in extraction result")
+                    extracted_data = {
+                        "company_name": "",
+                        "reporting_period": "",
+                        "currency": "",
+                        "income_statement": {},
+                        "balance_sheet": {},
+                        "notes": {
+                            "adj_ebitda_available": False,
+                            "adj_ebitda_details": "",
+                            "adj_working_capital_available": False,
+                            "adj_working_capital_details": ""
+                        }
+                    }
+                    
             # Step 2: Calculate financial ratios
+            logging.info("Step 2: Calculating financial ratios...")
             calculated_ratios = self.calculate_financial_ratios(extracted_data)
+            
+            # Step 3: Generate business overview and key findings
+            logging.info("Step 3: Generating business overview and key findings...")
+            business_overview = self.generate_business_overview(extracted_data)
+            key_findings = self.generate_key_findings(extracted_data, calculated_ratios)
+            
+            end_time = time.time()
+            logging.info(f"Financial analysis completed in {end_time - start_time:.2f} seconds")
             
             # Return combined result
             return {
                 "extracted_data": extracted_data,
-                "calculated_ratios": calculated_ratios
+                "calculated_ratios": calculated_ratios,
+                "business_overview": business_overview,
+                "key_findings": key_findings
             }
             
         except Exception as e:
-            import logging
             logging.exception("Error in analyze_financial_document")
             # Return error information
             return {
                 "error": str(e),
                 "extracted_data": {},
-                "calculated_ratios": {}
+                "calculated_ratios": {},
+                "business_overview": "Error analyzing document: " + str(e),
+                "key_findings": "Error analyzing document: " + str(e)
             }
             
     def generate_business_overview(self, extracted_data: Dict) -> str:
         """
         Generate a concise business overview based on the extracted data.
         """
-        overview_template = """
-Based on the extracted financial data, provide a concise business overview:
-{extracted_data}
-
-Output only the business overview text.
-"""
-        prompt = overview_template.format(extracted_data=json.dumps(extracted_data, indent=2))
-        response = self.analysis_llm.generate([prompt])
-        # Extract generated text from the first generation instead of using response.text
-        return response.generations[0].text.strip()
+        try:
+            result = self.overview_chain.invoke({
+                "extracted_data": json.dumps(extracted_data, indent=2)
+            })
+            return result["business_overview"].strip()
+        except Exception as e:
+            logging.exception("Error generating business overview")
+            return f"Error generating business overview: {str(e)}"
         
     def generate_key_findings(self, extracted_data: Dict, calculated_ratios: Dict) -> str:
         """
         Generate key findings and insights based on the extracted data and calculated ratios.
         """
-        findings_template = """
-Analyze the following extracted financial data and calculated ratios, and provide key findings 
-with focus on profitability, liquidity, solvency, and any notable trends:
-
-Extracted Data:
-{extracted_data}
-
-Calculated Ratios:
-{calculated_ratios}
-
-Output only the key findings text.
-"""
-        prompt = findings_template.format(
-            extracted_data=json.dumps(extracted_data, indent=2),
-            calculated_ratios=json.dumps(calculated_ratios, indent=2)
-        )
-        response = self.analysis_llm.generate([prompt])
-        return response.generations[0].text.strip()
+        try:
+            result = self.findings_chain.invoke({
+                "extracted_data": json.dumps(extracted_data, indent=2),
+                "calculated_ratios": json.dumps(calculated_ratios, indent=2)
+            })
+            return result["key_findings"].strip()
+        except Exception as e:
+            logging.exception("Error generating key findings")
+            return f"Error generating key findings: {str(e)}"

@@ -80,17 +80,16 @@ else:
     document_text = ""  # We rely on uploaded file and its stored context.
 
 if st.button("Run Analysis"):
-    # If no file and no pasted text, alert user.
-    if not uploaded_file and document_text.strip() == "":
-        st.error("Please either upload a document or paste document text to analyze.")
+    # Require an uploaded file for analysis since we want to leverage Gemini’s native PDF vision.
+    if not uploaded_file:
+        st.error("Please upload a document for analysis.")
     else:
         with st.spinner("Generating analysis and report..."):
             try:
-                # If a file is uploaded, send a placeholder value to trigger analysis using uploaded document context.
-                analysis_input = "Using uploaded document context" if uploaded_file else document_text
+                files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
                 response = httpx.post(
                     "http://127.0.0.1:8000/generate_report",
-                    json={"document_content": analysis_input},
+                    files=files,
                     timeout=120.0
                 )
                 if response.status_code == 200:

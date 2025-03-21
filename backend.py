@@ -10,6 +10,8 @@ import uuid
 from pathlib import Path
 import logging
 import tempfile
+import json
+import re
 from fastapi.responses import FileResponse
 from report_generator import generate_pdf_report
 
@@ -182,43 +184,158 @@ async def health_check():
 
 
 @app.post("/generate_report")
-async def generate_report(document_content: str = Body(..., embed=True)):
+async def generate_report(file: UploadFile = File(...)):
     """
     Endpoint to analyze a financial document and generate a PDF report.
-    Expects the JSON body to be:
-      { "document_content": "..." }
-    """
+    Directly uses the uploaded PDF file with Gemini's vision capabilities.
+    # """
+    file_path = None
     try:
-        # Create an instance of LangChainHandler and analyze the document
+        # Save uploaded file temporarily
+        file_path = UPLOAD_DIR / f"{uuid.uuid4()}_{file.filename}"
+        with open(file_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        logging.info(f"File saved to {file_path} ({len(content)} bytes)")
+        
+        # Determine MIME type
+        mime_type = "application/pdf"  # default
+        if file.filename.lower().endswith(".csv"):
+            mime_type = "text/csv"
+        elif file.filename.lower().endswith((".xlsx", ".xls")):
+            mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        
+        # Create a temporary chat session for analysis
+        analysis_session = client.chats.create(model='gemini-2.0-flash-thinking-exp-01-21')
+        
+        # Read file data
+        with open(file_path, "rb") as f:
+            file_data = f.read()
+        
+        # Create document part
+        document_part = types.Part.from_bytes(
+            data=file_data,
+            mime_type=mime_type
+        )
+        
+        # Extract financial data using Gemini directly
+        extraction_prompt = """You are a financial analyst tasked with extracting key data from financial statements.
+Please extract the following information from the provided document and output it in JSON format:
+
+```json
+{
+"company_name": "",
+"reporting_period": "",
+"currency": "",
+"income_statement": {
+"net_sales": null,
+"cost_of_goods_sold": null,
+"gross_profit": null,
+"operating_expenses": null,
+"operating_income": null,
+"interest_expenses": null,
+"net_income": null
+},
+"balance_sheet": {
+"cash_and_equivalents": null,
+"current_assets": null,
+"total_assets": null,
+"current_liabilities": null,
+"total_liabilities": null,
+"shareholders_equity": null,
+"average_inventory": null,
+"average_accounts_receivable": null
+},
+"notes": {
+"adj_ebitda_available": false,
+"adj_ebitda_details": "",
+"adj_working_capital_available": false,
+"adj_working_capital_details": ""
+}
+}
+```
+
+If any information is not available, use null for that value.
+If numbers have units (like thousands or millions), make sure to convert them to actual numbers and not include the units in the JSON values.
+If you see values for multiple years, use the most recent year's data.
+For average values (like average inventory), calculate them if provided with beginning and ending values, or use the most recent value if only one is available.
+
+Respond with ONLY the JSON, nothing else."""
+        
+        # Send the extraction request with document context
+        message_parts = [document_part, types.Part.from_text(text=extraction_prompt)]
+        extraction_response = analysis_session.send_message(message_parts)
+        
+        # Process the JSON response
+        json_text = extraction_response.text
+        try:
+            # First try direct JSON parsing
+            extracted_data = json.loads(json_text)
+        except json.JSONDecodeError:
+            # If that fails, try to extract JSON from code blocks
+            json_match = re.search(r'```json\s*(.*?)\s*```', json_text, re.DOTALL)
+            if json_match:
+                extracted_data = json.loads(json_match.group(1))
+            else:
+                # One more attempt without code block markers
+                json_match = re.search(r'({[\s\S]*})', json_text)
+                if json_match:
+                    extracted_data = json.loads(json_match.group(1))
+                else:
+                    raise ValueError("Failed to extract valid JSON from LLM response")
+        
+        # Calculate financial ratios
         from langchain_integration import LangChainHandler
         handler = LangChainHandler()
-        analysis_result = handler.analyze_financial_document(document_content)
+        calculated_ratios = handler.calculate_financial_ratios(extracted_data)
         
-        # Generate business overview and key findings
-        business_overview = handler.generate_business_overview(analysis_result.get("extracted_data", {}))
-        key_findings = handler.generate_key_findings(
-            analysis_result.get("extracted_data", {}), analysis_result.get("calculated_ratios", {})
-        )
+        # Generate business overview using Gemini
+        overview_prompt = f"""Based on the following extracted financial data, provide a concise business overview:
+{json.dumps(extracted_data, indent=2)}
+
+Output only the business overview text."""
+        
+        overview_response = analysis_session.send_message(overview_prompt)
+        business_overview = overview_response.text.strip()
+        
+        # Generate key findings using Gemini
+        findings_prompt = f"""Analyze the following extracted financial data and calculated ratios, and provide key findings 
+with focus on profitability, liquidity, solvency, and any notable trends:
+
+Extracted Data:
+{json.dumps(extracted_data, indent=2)}
+
+Calculated Ratios:
+{json.dumps(calculated_ratios, indent=2)}
+
+Output only the key findings text."""
+        
+        findings_response = analysis_session.send_message(findings_prompt)
+        key_findings = findings_response.text.strip()
         
         # Create report data
         report_data = {
             "business_overview": business_overview,
             "key_findings": key_findings,
-            "extracted_data": analysis_result.get("extracted_data", {}),
-            "calculated_ratios": analysis_result.get("calculated_ratios", {})
+            "extracted_data": extracted_data,
+            "calculated_ratios": calculated_ratios
         }
         
         # Generate PDF report in a temporary file
-        import tempfile
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             output_path = tmp.name
-        from report_generator import generate_pdf_report
+        
         generate_pdf_report(report_data, output_path)
         
-        from fastapi.responses import FileResponse
+        # Clean up the temporary file
+        if file_path:
+            file_path.unlink(missing_ok=True)
+        
         return FileResponse(path=output_path, filename="financial_report.pdf", media_type="application/pdf")
     except Exception as e:
-        import logging
+        # Clean up on error
+        if file_path:
+            file_path.unlink(missing_ok=True)
         logging.exception("Error generating report")
         raise HTTPException(status_code=500, detail=str(e))
 
