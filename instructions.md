@@ -647,6 +647,7 @@ Technical Implementation:
     *   python-dotenv: For secure API key management.
     *   reportlab: For PDF report generation.
     *   httpx: For making HTTP requests.
+```
 *   API Key: Securely stored and accessed using environment variables.
 
 Architecture:
