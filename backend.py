@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google import genai
@@ -9,6 +9,9 @@ from typing import List, Optional, Dict, Any
 import uuid
 from pathlib import Path
 import logging
+import tempfile
+from fastapi.responses import FileResponse
+from report_generator import generate_pdf_report
 
 load_dotenv()
 
@@ -176,6 +179,48 @@ async def get_session_history(session_id: str):
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+
+@app.post("/generate_report")
+async def generate_report(document_content: str = Body(..., embed=True)):
+    """
+    Endpoint to analyze a financial document and generate a PDF report.
+    Expects the JSON body to be:
+      { "document_content": "..." }
+    """
+    try:
+        # Create an instance of LangChainHandler and analyze the document
+        from langchain_integration import LangChainHandler
+        handler = LangChainHandler()
+        analysis_result = handler.analyze_financial_document(document_content)
+        
+        # Generate business overview and key findings
+        business_overview = handler.generate_business_overview(analysis_result.get("extracted_data", {}))
+        key_findings = handler.generate_key_findings(
+            analysis_result.get("extracted_data", {}), analysis_result.get("calculated_ratios", {})
+        )
+        
+        # Create report data
+        report_data = {
+            "business_overview": business_overview,
+            "key_findings": key_findings,
+            "extracted_data": analysis_result.get("extracted_data", {}),
+            "calculated_ratios": analysis_result.get("calculated_ratios", {})
+        }
+        
+        # Generate PDF report in a temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            output_path = tmp.name
+        from report_generator import generate_pdf_report
+        generate_pdf_report(report_data, output_path)
+        
+        from fastapi.responses import FileResponse
+        return FileResponse(path=output_path, filename="financial_report.pdf", media_type="application/pdf")
+    except Exception as e:
+        import logging
+        logging.exception("Error generating report")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
