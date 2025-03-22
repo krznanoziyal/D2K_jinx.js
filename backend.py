@@ -14,6 +14,7 @@ import json
 import re
 from fastapi.responses import FileResponse
 from report_generator import generate_pdf_report
+from prompts import EXTRACTION_PROMPT
 
 load_dotenv()
 
@@ -218,50 +219,8 @@ async def generate_report(file: UploadFile = File(...)):
             mime_type=mime_type
         )
         
-        # Extract financial data using Gemini directly
-        extraction_prompt = """You are a financial analyst tasked with extracting key data from financial statements.
-Please extract the following information from the provided document and output it in JSON format:
-
-```json
-{
-"company_name": "",
-"reporting_period": "",
-"currency": "",
-"income_statement": {
-"net_sales": null,
-"cost_of_goods_sold": null,
-"gross_profit": null,
-"operating_expenses": null,
-"operating_income": null,
-"interest_expenses": null,
-"net_income": null
-},
-"balance_sheet": {
-"cash_and_equivalents": null,
-"current_assets": null,
-"total_assets": null,
-"current_liabilities": null,
-"total_liabilities": null,
-"shareholders_equity": null,
-"average_inventory": null,
-"average_accounts_receivable": null
-},
-"notes": {
-"adj_ebitda_available": false,
-"adj_ebitda_details": "",
-"adj_working_capital_available": false,
-"adj_working_capital_details": ""
-}
-}
-```
-
-If any information is not available, use null for that value.
-If numbers have units (like thousands or millions), make sure to convert them to actual numbers and not include the units in the JSON values.
-If you see values for multiple years, use the most recent year's data.
-For average values (like average inventory), calculate them if provided with beginning and ending values, or use the most recent value if only one is available.
-
-Respond with ONLY the JSON, nothing else."""
-        
+        # Use EXTRACTION_PROMPT from prompts.py instead of inline text
+        extraction_prompt = EXTRACTION_PROMPT
         # Send the extraction request with document context
         message_parts = [document_part, types.Part.from_text(text=extraction_prompt)]
         extraction_response = analysis_session.send_message(message_parts)
@@ -291,24 +250,24 @@ Respond with ONLY the JSON, nothing else."""
         
         # Generate business overview using Gemini
         overview_prompt = f"""Based on the following extracted financial data, provide a concise business overview:
-{json.dumps(extracted_data, indent=2)}
+                {json.dumps(extracted_data, indent=2)}
 
-Output only the business overview text."""
+                Output only the business overview text."""
         
         overview_response = analysis_session.send_message(overview_prompt)
         business_overview = overview_response.text.strip()
         
         # Generate key findings using Gemini
         findings_prompt = f"""Analyze the following extracted financial data and calculated ratios, and provide key findings 
-with focus on profitability, liquidity, solvency, and any notable trends:
+                with focus on profitability, liquidity, solvency, and any notable trends:
 
-Extracted Data:
-{json.dumps(extracted_data, indent=2)}
+                Extracted Data:
+                {json.dumps(extracted_data, indent=2)}
 
-Calculated Ratios:
-{json.dumps(calculated_ratios, indent=2)}
+                Calculated Ratios:
+                {json.dumps(calculated_ratios, indent=2)}
 
-Output only the key findings text."""
+                Output only the key findings text."""
         
         findings_response = analysis_session.send_message(findings_prompt)
         key_findings = findings_response.text.strip()

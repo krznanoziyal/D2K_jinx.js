@@ -16,6 +16,7 @@ from financial_tools import (
     calculate_receivables_turnover_ratio, calculate_debt_ratio,
     calculate_interest_coverage_ratio
 )
+from prompts import EXTRACTION_PROMPT, OVERVIEW_PROMPT, FINDINGS_PROMPT
 
 load_dotenv()
 
@@ -47,52 +48,7 @@ class LangChainHandler:
         
     def _setup_extraction_chain(self):
         """Set up the extraction chain for financial data"""
-        extraction_template = """You are a financial analyst tasked with extracting key data from financial statements.
-Please extract the following information from the provided document and output it in JSON format:
-
-```json
-{
-"company_name": "",
-"reporting_period": "",
-"currency": "",
-"income_statement": {
-"net_sales": null,
-"cost_of_goods_sold": null,
-"gross_profit": null,
-"operating_expenses": null,
-"operating_income": null,
-"interest_expenses": null,
-"net_income": null
-},
-"balance_sheet": {
-"cash_and_equivalents": null,
-"current_assets": null,
-"total_assets": null,
-"current_liabilities": null,
-"total_liabilities": null,
-"shareholders_equity": null,
-"average_inventory": null,
-"average_accounts_receivable": null
-},
-"notes": {
-"adj_ebitda_available": false,
-"adj_ebitda_details": "",
-"adj_working_capital_available": false,
-"adj_working_capital_details": ""
-}
-}
-```
-
-If any information is not available, use null for that value.
-If numbers have units (like thousands or millions), make sure to convert them to actual numbers and not include the units in the JSON values.
-If you see values for multiple years, use the most recent year's data.
-For average values (like average inventory), calculate them if provided with beginning and ending values, or use the most recent value if only one is available.
-
-The financial document content is as follows:
-{document_content}
-
-Remember to format your response ONLY as valid JSON within the ```json and ``` tags. Do not add any additional explanation before or after the JSON."""
-        
+        extraction_template = EXTRACTION_PROMPT
         self.extraction_prompt = ChatPromptTemplate.from_template(extraction_template)
         self.extraction_chain = LLMChain(
             llm=self.extraction_llm, 
@@ -103,13 +59,7 @@ Remember to format your response ONLY as valid JSON within the ```json and ``` t
     
     def _setup_analysis_chains(self):
         """Set up chains for business overview and key findings"""
-        # Business overview template
-        overview_template = """Based on the extracted financial data, provide a concise business overview:
-{extracted_data}
-
-If there is no data available, indicate that the financial information is insufficient to provide an overview.
-Output only the business overview text."""
-        
+        overview_template = OVERVIEW_PROMPT
         self.overview_prompt = ChatPromptTemplate.from_template(overview_template)
         self.overview_chain = LLMChain(
             llm=self.analysis_llm,
@@ -118,19 +68,7 @@ Output only the business overview text."""
             verbose=True
         )
         
-        # Key findings template
-        findings_template = """Analyze the following extracted financial data and calculated ratios, and provide key findings 
-with focus on profitability, liquidity, solvency, and any notable trends:
-
-Extracted Data:
-{extracted_data}
-
-Calculated Ratios:
-{calculated_ratios}
-
-If data is insufficient, please indicate what specific information is missing that would be needed for a proper analysis.
-Output only the key findings text."""
-        
+        findings_template = FINDINGS_PROMPT
         self.findings_prompt = ChatPromptTemplate.from_template(findings_template)
         self.findings_chain = LLMChain(
             llm=self.analysis_llm,
