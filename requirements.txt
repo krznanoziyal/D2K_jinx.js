@@ -13,3 +13,5 @@ python-multipart
 google-genai
 uvicorn
 matplotlib
+weasyprint 
+jinja2
