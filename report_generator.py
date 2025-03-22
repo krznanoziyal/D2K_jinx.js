@@ -374,6 +374,23 @@ def generate_pdf_report(report_data: dict, output_path: str):
     # Add page break after table of contents
     story.append(PageBreak())
     
+    # NEW: Executive Summary (first 1-2 pages)
+    story.append(Paragraph("EXECUTIVE SUMMARY", heading1_style))
+    story.append(HorizontalRule(450, thickness=2, color=colors.darkblue))
+    story.append(Spacer(1, 0.2 * inch))
+    
+    overview = report_data.get("business_overview", "No business overview available.")
+    key_findings = report_data.get("key_findings", "No key findings available.")
+    sentiment = report_data.get("sentiment_analysis", "No sentiment analysis available.")
+    business_model = report_data.get("business_model", "No business model recommendations available.")
+    
+    summary_text = (f"<b>Business Overview:</b><br/>{overview}<br/><br/>"
+                    f"<b>Key Findings (Summary):</b><br/>{key_findings}<br/><br/>"
+                    f"<b>Management Sentiment Analysis:</b><br/>{sentiment}<br/><br/>"
+                    f"<b>Business Model Recommendation:</b><br/>{business_model}")
+    story.append(Paragraph(summary_text, body_style))
+    story.append(PageBreak())
+    
     # Add Business Overview section
     story.append(Paragraph("1. BUSINESS OVERVIEW", heading1_style))
     story.append(HorizontalRule(450, thickness=2, color=colors.lightsteelblue))
@@ -469,17 +486,13 @@ def generate_pdf_report(report_data: dict, output_path: str):
             else:
                 formatted_findings += line + "<br/>"
     else:
-        # If no markdown formatting found, try to organize by paragraphs
+        # Replace double colons with a single colon to avoid truncation issues
+        findings_text = findings_text.replace("::", ":")
         paragraphs = findings_text.split("\n")
         for para in paragraphs:
             if para.strip():
-                if ":" in para:
-                    # This looks like it might be a category: description format
-                    parts = para.split(":", 1)
-                    formatted_findings += f"<strong>{parts[0]}</strong>: {parts[1]}<br/><br/>"
-                else:
-                    formatted_findings += para + "<br/><br/>"
-    
+                formatted_findings += para.strip() + "<br/><br/>"
+                
     # Use formatted findings if we have them, otherwise use the original text
     if formatted_findings:
         story.append(Paragraph(formatted_findings, info_style))
@@ -487,6 +500,19 @@ def generate_pdf_report(report_data: dict, output_path: str):
         story.append(Paragraph(findings_text, info_style))
     
     story.append(PageBreak())
+    
+    # New: Sentiment Analysis Section
+    story.append(Paragraph("3. SENTIMENT ANALYSIS OF MANAGEMENT COMMENTARY", heading1_style))
+    story.append(HorizontalRule(450, thickness=2, color=colors.darkblue))
+    sentiment_text = report_data.get("sentiment_analysis", "No sentiment analysis available.")
+    story.append(Paragraph(sentiment_text, body_style))
+    
+    # New: Business Model Generation Section
+    story.append(PageBreak())
+    story.append(Paragraph("4. AI-POWERED BUSINESS MODEL GENERATION", heading1_style))
+    story.append(HorizontalRule(450, thickness=2, color=colors.darkblue))
+    bm_text = report_data.get("business_model", "No business model recommendations available.")
+    story.append(Paragraph(bm_text, body_style))
     
     # Add Financial Ratios section with charts
     ratios = report_data.get("calculated_ratios", {})
@@ -851,6 +877,60 @@ def generate_pdf_report(report_data: dict, output_path: str):
                 wc_details = notes.get("adj_working_capital_details", "No details provided.")
                 story.append(Paragraph(wc_details, body_style))
                 story.append(Spacer(1, 0.2 * inch))
+    
+    # Add a red flags section to the PDF report generation
+    red_flags_value = report_data.get("red_flags")
+    if isinstance(red_flags_value, dict):
+        red_flag_data = red_flags_value.get("red_flags", [])
+    elif isinstance(red_flags_value, list):
+        red_flag_data = red_flags_value
+    else:
+        red_flag_data = []
+
+    if red_flag_data:
+        story.append(Paragraph("Red Flags & Warning Signs", heading2_style))
+        
+        # Create a table for red flags
+        red_flag_table_data = [["Issue", "Severity", "Recommendation"]]
+        
+        # Add each red flag to the table
+        for flag in red_flag_data:
+            red_flag_table_data.append([
+                flag.get("issue", "N/A"),
+                flag.get("severity", "N/A"),
+                flag.get("recommendation", "N/A")
+            ])
+        
+        # Create and style the table
+        red_flag_table = Table(red_flag_table_data, colWidths=[2.5*inch, 1*inch, 3*inch])
+        red_flag_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkred),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ALIGN', (1, 1), (1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.pink, colors.mistyrose])
+        ]))
+        story.append(red_flag_table)
+        
+        # Add explanatory text
+        warning_text = ("These red flags indicate potential areas of concern that warrant further investigation. "
+                        "They may represent financial risks, reporting irregularities, or operational challenges.")
+        story.append(Paragraph(warning_text, ParagraphStyle(
+            'WarningText',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.darkred,
+            spaceBefore=6,
+            spaceAfter=12
+        )))
+    else:
+        story.append(Paragraph("No significant red flags were identified in this analysis.", body_style))
+
     
     # Add footnote
     story.append(Spacer(1, inch))

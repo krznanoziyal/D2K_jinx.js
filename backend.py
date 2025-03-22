@@ -189,7 +189,7 @@ async def generate_report(file: UploadFile = File(...)):
     """
     Endpoint to analyze a financial document and generate a PDF report.
     Directly uses the uploaded PDF file with Gemini's vision capabilities.
-    # """
+    """
     file_path = None
     try:
         # Save uploaded file temporarily
@@ -248,43 +248,43 @@ async def generate_report(file: UploadFile = File(...)):
         handler = LangChainHandler()
         calculated_ratios = handler.calculate_financial_ratios(extracted_data)
         
-        # Generate business overview using Gemini
-        overview_prompt = f"""Based on the following extracted financial data, provide a concise business overview:
-                {json.dumps(extracted_data, indent=2)}
-
-                Output only the business overview text."""
+        # Add red flags detection
+        red_flags_detection = handler.detect_financial_red_flags(extracted_data, calculated_ratios)
         
-        overview_response = analysis_session.send_message(overview_prompt)
-        business_overview = overview_response.text.strip()
+        # Generate key findings, sentiment analysis, and business model recommendations
+        logging.info("Generating key findings, sentiment analysis, and business model recommendations...")
+        key_findings_json = handler.generate_key_findings(extracted_data, calculated_ratios)
         
-        # Generate key findings using Gemini
-        findings_prompt = f"""Analyze the following extracted financial data and calculated ratios, and provide key findings 
-                with focus on profitability, liquidity, solvency, and any notable trends:
-
-                Extracted Data:
-                {json.dumps(extracted_data, indent=2)}
-
-                Calculated Ratios:
-                {json.dumps(calculated_ratios, indent=2)}
-
-                Output only the key findings text."""
+        # Generate business overview
+        logging.info("Generating business overview...")
+        business_overview = handler.generate_business_overview(extracted_data)
         
-        findings_response = analysis_session.send_message(findings_prompt)
-        key_findings = findings_response.text.strip()
-        
-        # Create report data
+        # Log what we received from the handler
+        logging.info(f"Business overview: {business_overview[:100]}...")
+        logging.info(f"Key findings: {key_findings_json.get('key_findings', '')[:100]}...")
+        logging.info(f"Sentiment analysis: {key_findings_json.get('sentiment_analysis', '')[:100]}...")
+        logging.info(f"Business model: {key_findings_json.get('business_model', '')[:100]}...")
+                
+        # Merge the separately detected red flags with the ones returned from the findings prompt,
+        # if necessary – here we give priority to key_findings' red_flags.
         report_data = {
             "business_overview": business_overview,
-            "key_findings": key_findings,
+            "key_findings": key_findings_json.get("key_findings", ""),
+            "sentiment_analysis": key_findings_json.get("sentiment_analysis", "No sentiment analysis available."),
+            "business_model": key_findings_json.get("business_model", "No business model suggestions available."),
             "extracted_data": extracted_data,
-            "calculated_ratios": calculated_ratios
+            "calculated_ratios": calculated_ratios,
+            "red_flags": key_findings_json.get("red_flags", red_flags_detection.get("red_flags", []))
         }
+
+        logging.info("Preparing to generate PDF report with all data...")
         
         # Generate PDF report in a temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             output_path = tmp.name
         
         generate_pdf_report(report_data, output_path)
+        logging.info(f"PDF report generated successfully at {output_path}")
         
         # Clean up the temporary file
         if file_path:
@@ -295,8 +295,68 @@ async def generate_report(file: UploadFile = File(...)):
         # Clean up on error
         if file_path:
             file_path.unlink(missing_ok=True)
-        logging.exception("Error generating report")
+        logging.exception(f"Error generating report: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/detect_anomalies")
+async def detect_anomalies(
+    file: UploadFile = File(...),
+    sensitivity: float = Form(1.0)
+):
+    """
+    Detect anomalies in financial data using statistical methods.
+    """
+    try:
+        content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Empty file")
+
+        # Save content to a temporary file
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".csv").name
+        with open(temp_file, "wb") as f:
+            f.write(content)
+
+        try:
+            # Read financial data
+            financial_data = pd.read_csv(temp_file)
+
+            # Basic statistical anomaly detection
+            anomalies = []
+            for column in financial_data.select_dtypes(include=['float64', 'int64']).columns:
+                mean = financial_data[column].mean()
+                std = financial_data[column].std()
+                threshold = sensitivity * 2 * std
+
+                # Find rows where values are beyond threshold
+                outliers = financial_data[abs(financial_data[column] - mean) > threshold]
+
+                for idx, row in outliers.iterrows():
+                    anomalies.append({
+                        "Year": row.get("Year", idx),
+                        "Column": column,
+                        "Value": row[column],
+                        "Mean": mean,
+                        "Deviation": abs(row[column] - mean),
+                        "Confidence": min(abs(row[column] - mean) / (3 * std), 1.0)
+                    })
+
+            return {
+                "num_anomalies": len(anomalies),
+                "anomalies": anomalies
+            }
+
+        except Exception as e:
+            logging.exception("Error during anomaly detection processing:")
+            raise HTTPException(status_code=500, detail=str(e))
+
+        finally:
+            # Clean up temp file
+            os.unlink(temp_file)
+
+    except Exception as e:
+        logging.exception("Error in detect_anomalies endpoint:")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 if __name__ == "__main__":
