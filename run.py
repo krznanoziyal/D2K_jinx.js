@@ -42,10 +42,7 @@ def main():
     
     print("Starting Streamlit frontend...")
     frontend = run_command("start cmd /k streamlit run app.py")
-    
-    # Open web browser
-    webbrowser.open("http://localhost:8501")
-    
+        
     print("\n===== Financial Statement Analysis Platform Started =====")
     print("Backend API: http://localhost:8000")
     print("Frontend UI: http://localhost:8501")
