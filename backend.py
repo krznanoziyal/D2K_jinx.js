@@ -15,6 +15,7 @@ import re
 from fastapi.responses import FileResponse
 from report_generator import generate_pdf_report
 from prompts import EXTRACTION_PROMPT
+import pandas as pd
 
 load_dotenv()
 
