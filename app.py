@@ -22,7 +22,7 @@ with st.expander("How to use this app"):
     1. Upload a financial document using the sidebar (supports PDF, CSV, Excel)
     2. Ask a question about the document in the chat
     3. For the initial question, provide context such as: "Analyze this financial statement" or "What are the key financial metrics?"
-    
+
     **Example Questions:**
     - "Analyze this financial statement and provide key metrics"
     - "What is the company's current ratio?"
@@ -48,20 +48,20 @@ with st.sidebar:
         type=["pdf", "csv", "xlsx", "xls"],
         help="Upload a financial document to analyze"
     )
-    
+
     if uploaded_file is not None:
         st.success(f"File '{uploaded_file.name}' is ready for analysis")
-    
+
     # Show all documents in the current session
     if st.session_state.documents:
         st.header("Uploaded Documents")
         for doc in st.session_state.documents:
             st.info(f"📄 {doc}")
-    
+
     st.header("About")
     st.markdown("This is a prototype for an AI-driven Financial Statement Analysis Platform.")
     st.markdown("You can chat with the AI or upload documents for analysis.")
-    
+
     # Add a button to clear the conversation
     if st.button("Clear Conversation"):
         st.session_state.messages = []
@@ -116,13 +116,18 @@ if st.button("Run Analysis"):
                 st.error(f"Exception during analysis: {str(e)}")
 
 # -------------------------------
-# Chat interface (moved to the bottom)
+# Chat interface
 st.header("Chat with the AI")
 
 # Function to handle regular chat
 def process_chat(prompt):
     try:
         with st.spinner("Thinking..."):
+            # Check if the user included the suggested instruction (optional enhancement)
+            # You could potentially remove the instruction here before sending to backend if desired
+            # if prompt.startswith("Analyze this document thoroughly as a financial expert..."):
+            #     prompt = prompt.replace("Analyze this document thoroughly...", "") # Example removal
+
             response = httpx.post(
                 "http://127.0.0.1:8000/chat",
                 json={
@@ -146,7 +151,7 @@ def process_chat(prompt):
 def process_document_chat(file, prompt):
     try:
         with st.spinner("Processing document and analyzing..."):
-            files = {"file": (file.name, file.getvalue(), "application/octet-stream")}
+            files = {"file": (file.name, file.getvalue(), file.type)} # Use file.type for more specific mime if available
             form_data = {
                 "prompt": prompt,
                 "session_id": st.session_state.session_id if st.session_state.session_id else "",
@@ -162,6 +167,7 @@ def process_document_chat(file, prompt):
                 st.session_state.session_id = data["session_id"]
                 if file.name not in st.session_state.documents:
                     st.session_state.documents.append(file.name)
+                    st.experimental_rerun() # Rerun to update sidebar list immediately
                 return data["response"]
             else:
                 st.error(f"Error: {response.text}")
@@ -175,20 +181,54 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+# --- NEW --- Display helper message for new chats ---
+if not st.session_state.messages:
+    st.info(
+        """
+        **Tip for Enhanced Analysis:** We're actively working on refining the AI for deeper financial insights.
+        Currently, the model might sometimes be a bit cautious.
+
+        ✨ For more comprehensive analysis, especially when starting a **new chat**, you might find it helpful to begin your **first question** with a directive like:
+
+        **"Act as a financial expert. Analyze this document thoroughly, providing deep insights, interpretations, key figures, and relevant calculations. Ensure your response is well-structured."**
+
+        This encourages the AI to leverage its expertise more fully. We appreciate your understanding as we continue to improve the model!
+        """,
+        icon="💡"
+    )
+# --- END NEW ---
+
 # Chat input section
-prompt = st.chat_input("Ask a question about financial statements...")
+prompt = st.chat_input("Ask a question about the financial document...")
 
 if prompt:
+    # Add user message to chat history immediately
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    # Display user message in chat message container
     with st.chat_message("user"):
         st.markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    # If a new file was uploaded earlier and not already processed, use it
+
+    # Determine if a file needs processing with this prompt
+    # This logic assumes the first message after an upload should process the doc
+    process_with_doc = False
     if uploaded_file and uploaded_file.name not in st.session_state.documents:
-        response_text = process_document_chat(uploaded_file, prompt)
+         process_with_doc = True
+
+    # Call the appropriate backend function
+    if process_with_doc:
+         with st.chat_message("assistant"):
+            response_text = process_document_chat(uploaded_file, prompt)
+            st.markdown(response_text)
+            # Add assistant response to chat history
+            st.session_state.messages.append({"role": "assistant", "content": response_text})
+         # Rerun to update the sidebar list *after* processing is done
+         st.experimental_rerun()
     else:
-        response_text = process_chat(prompt)
-    
-    with st.chat_message("assistant"):
-        st.markdown(response_text)
-    st.session_state.messages.append({"role": "assistant", "content": response_text})
+        # Just process regular chat
+        with st.chat_message("assistant"):
+            response_text = process_chat(prompt)
+            st.markdown(response_text)
+            # Add assistant response to chat history
+            st.session_state.messages.append({"role": "assistant", "content": response_text})
+
+# Note: The rerun logic for document list update has been slightly adjusted for better flow.
