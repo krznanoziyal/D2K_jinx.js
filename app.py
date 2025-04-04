@@ -4,6 +4,11 @@ import json
 from typing import List, Dict
 import time
 import os
+import google.generativeai as genai
+
+# Configure Gemini using the secret API key
+genai.configure(api_key=st.secrets["google"]["api_key"])
+
 
 st.set_page_config(
     page_title="Financial Statement Analyzer",
